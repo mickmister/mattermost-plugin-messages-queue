@@ -1,13 +1,20 @@
+MM_SERVER_PATH ?= $(MM_SERVER_PATH:)
+ifeq ($(MM_SERVER_PATH),)
+	MM_SERVER_PATH := ../../mattermost-server
+endif
+
 GO ?= $(shell command -v go 2> /dev/null)
 NPM ?= $(shell command -v npm 2> /dev/null)
 CURL ?= $(shell command -v curl 2> /dev/null)
-MM_DEBUG ?=
+DEBUG ?=
 MANIFEST_FILE ?= plugin.json
 GOPATH ?= $(shell go env GOPATH)
 GO_TEST_FLAGS ?= -race
 GO_BUILD_FLAGS ?=
 MM_UTILITIES_DIR ?= ../mattermost-utilities
 DLV_DEBUG_PORT := 2346
+MATTERMOST_PLUGINS_PATH=$(MM_SERVER_PATH)/plugins
+INSTALLED_PLUGIN_PATH=$(MATTERMOST_PLUGINS_PATH)/$(PLUGIN_ID)
 
 export GO111MODULE=on
 
@@ -44,7 +51,6 @@ check-style: webapp/node_modules
 
 ifneq ($(HAS_WEBAPP),)
 	cd webapp && npm run lint
-	cd webapp && npm run check-types
 endif
 
 ifneq ($(HAS_SERVER),)
@@ -62,12 +68,12 @@ endif
 server:
 ifneq ($(HAS_SERVER),)
 	mkdir -p server/dist;
-ifeq ($(MM_DEBUG),)
+ifeq ($(DEBUG),)
 	cd server && env GOOS=linux GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) -o dist/plugin-linux-amd64;
 	cd server && env GOOS=darwin GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) -o dist/plugin-darwin-amd64;
 	cd server && env GOOS=windows GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) -o dist/plugin-windows-amd64.exe;
 else
-	$(info DEBUG mode is on; to disable, unset MM_DEBUG)
+	$(info DEBUG mode is on; to disable, unset DEBUG)
 
 	cd server && env GOOS=darwin GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) -gcflags "all=-N -l" -o dist/plugin-darwin-amd64;
 	cd server && env GOOS=linux GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) -gcflags "all=-N -l" -o dist/plugin-linux-amd64;
@@ -76,17 +82,17 @@ endif
 endif
 
 ## Ensures NPM dependencies are installed without having to run this all the time.
-webapp/node_modules: $(wildcard webapp/package.json)
 ifneq ($(HAS_WEBAPP),)
+webapp/node_modules: webapp/package.json
 	cd webapp && $(NPM) install
 	touch $@
 endif
 
 ## Builds the webapp, if it exists.
+ifneq ($(HAS_WEBAPP),)
 .PHONY: webapp
 webapp: webapp/node_modules
-ifneq ($(HAS_WEBAPP),)
-ifeq ($(MM_DEBUG),)
+ifeq ($(DEBUG),)
 	cd webapp && $(NPM) run build;
 else
 	cd webapp && $(NPM) run debug;
@@ -103,15 +109,15 @@ ifneq ($(wildcard $(ASSETS_DIR)/.),)
 	cp -r $(ASSETS_DIR) dist/$(PLUGIN_ID)/
 endif
 ifneq ($(HAS_PUBLIC),)
-	cp -r public dist/$(PLUGIN_ID)/
+	cp -r public/ dist/$(PLUGIN_ID)/
 endif
 ifneq ($(HAS_SERVER),)
-	mkdir -p dist/$(PLUGIN_ID)/server
-	cp -r server/dist dist/$(PLUGIN_ID)/server/
+	mkdir -p dist/$(PLUGIN_ID)/server/dist;
+	cp -r server/dist/* dist/$(PLUGIN_ID)/server/dist/;
 endif
 ifneq ($(HAS_WEBAPP),)
-	mkdir -p dist/$(PLUGIN_ID)/webapp
-	cp -r webapp/dist dist/$(PLUGIN_ID)/webapp/
+	mkdir -p dist/$(PLUGIN_ID)/webapp/dist;
+	cp -r webapp/dist/* dist/$(PLUGIN_ID)/webapp/dist/;
 endif
 	cd dist && tar -cvzf $(BUNDLE_NAME) $(PLUGIN_ID)
 
@@ -129,7 +135,7 @@ deploy: dist
 ## Builds and installs the plugin to a server, updating the webapp automatically when changed.
 .PHONY: watch
 watch: apply server bundle
-ifeq ($(MM_DEBUG),)
+ifeq ($(DEBUG),)
 	cd webapp && $(NPM) run build:watch
 else
 	cd webapp && $(NPM) run debug:watch
@@ -188,9 +194,6 @@ ifneq ($(HAS_SERVER),)
 endif
 ifneq ($(HAS_WEBAPP),)
 	cd webapp && $(NPM) run test;
-endif
-ifneq ($(wildcard ./build/sync/plan/.),)
-	cd ./build/sync && $(GO) test -v $(GO_TEST_FLAGS) ./...
 endif
 
 ## Creates a coverage report for the server code.
@@ -252,14 +255,34 @@ ifneq ($(HAS_WEBAPP),)
 endif
 	rm -fr build/bin/
 
-## Sync directory with a starter template
-sync:
-ifndef STARTERTEMPLATE_PATH
-	@echo STARTERTEMPLATE_PATH is not set.
-	@echo Set STARTERTEMPLATE_PATH to a local clone of https://github.com/mattermost/mattermost-plugin-starter-template and retry.
-	@exit 1
-endif
-	cd ${STARTERTEMPLATE_PATH} && go run ./build/sync/main.go ./build/sync/plan.yml $(PWD)
+## Watch webapp and server changes and redeploy locally using local filesystem (MM_SERVER_PATH)
+.PHONY: live-watch
+live-watch:
+	make -j2 live-watch-server live-watch-webapp
+
+## Watch server changes and redeploy locally using local filesystem (MM_SERVER_PATH)
+.PHONY: live-watch-server
+live-watch-server: apply
+	modd
+
+## Watch webapp changes and redeploy locally using local filesystem (MM_SERVER_PATH)
+.PHONY: live-watch-webapp
+live-watch-webapp: apply
+	cd webapp && $(NPM) run live-watch
+
+.PHONY: deploy-to-mattermost-directory
+deploy-to-mattermost-directory:
+	./build/bin/pluginctl disable $(PLUGIN_ID) || true
+	mkdir -p $(INSTALLED_PLUGIN_PATH)
+	cp $(MANIFEST_FILE) $(INSTALLED_PLUGIN_PATH)/
+	cp -r $(ASSETS_DIR) $(INSTALLED_PLUGIN_PATH)/
+	cp -r public $(INSTALLED_PLUGIN_PATH)/
+	mkdir -p $(INSTALLED_PLUGIN_PATH)/server
+	cp -r server/dist $(INSTALLED_PLUGIN_PATH)/server/
+	mkdir -p $(INSTALLED_PLUGIN_PATH)/webapp
+	cp -r webapp/dist $(INSTALLED_PLUGIN_PATH)/webapp/
+	./build/bin/pluginctl enable $(PLUGIN_ID)
+	@echo plugin built at: $(INSTALLED_PLUGIN_PATH)
 
 # Help documentation à la https://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
 help:
