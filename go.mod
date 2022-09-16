@@ -3,10 +3,10 @@ module github.com/mattermost/mattermost-plugin-starter-template
 go 1.12
 
 require (
-	github.com/kr/text v0.2.0 // indirect
-	github.com/mattermost/mattermost-server/v5 v5.26.2
-	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
+	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
+	github.com/mattermost/mattermost-server/v5 v5.28.0
+	github.com/nicksnyder/go-i18n/v2 v2.1.1
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.6.1
-	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
+	golang.org/x/sys v0.0.0-20220915200043-7b5979e65e41 // indirect
 )

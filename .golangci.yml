@@ -3,6 +3,9 @@ run:
   modules-download-mode: readonly
 
 linters-settings:
+  goconst:
+    min-len: 2
+    min-occurrences: 2
   gofmt:
     simplify: true
   goimports:
@@ -21,6 +24,7 @@ linters:
     - bodyclose
     - deadcode
     - errcheck
+    - goconst
     - gocritic
     - gofmt
     - goimports
@@ -29,6 +33,7 @@ linters:
     - gosimple
     - govet
     - ineffassign
+    - interfacer
     - misspell
     - nakedret
     - staticcheck
@@ -44,7 +49,6 @@ issues:
   exclude-rules:
     - path: server/manifest.go
       linters:
-        - deadcode
         - unused
         - varcheck
     - path: server/configuration.go
@@ -52,5 +56,5 @@ issues:
         - unused
     - path: _test\.go
       linters:
-        - bodyclose
+        - goconst
         - scopelint # https://github.com/kyoh86/scopelint/issues/4

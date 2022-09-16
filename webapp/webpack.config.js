@@ -13,7 +13,7 @@ if (NPM_TARGET === 'debug' || NPM_TARGET === 'debug:watch') {
 }
 
 const plugins = [];
-if (NPM_TARGET === 'build:watch' || NPM_TARGET === 'debug:watch') {
+if (NPM_TARGET === 'build:watch' || NPM_TARGET === 'debug:watch' || NPM_TARGET === 'live-watch') {
     plugins.push({
         apply: (compiler) => {
             compiler.hooks.watchRun.tap('WatchStartPlugin', () => {
@@ -21,7 +21,11 @@ if (NPM_TARGET === 'build:watch' || NPM_TARGET === 'debug:watch') {
                 console.log('Change detected. Rebuilding webapp.');
             });
             compiler.hooks.afterEmit.tap('AfterEmitPlugin', () => {
-                exec('cd .. && make deploy-from-watch', (err, stdout, stderr) => {
+                let command = 'cd .. && make deploy-from-watch';
+                if (NPM_TARGET === 'live-watch') {
+                    command = 'cd .. && make deploy-to-mattermost-directory';
+                }
+                exec(command, (err, stdout, stderr) => {
                     if (stdout) {
                         process.stdout.write(stdout);
                     }
@@ -36,13 +40,12 @@ if (NPM_TARGET === 'build:watch' || NPM_TARGET === 'debug:watch') {
 
 module.exports = {
     entry: [
-        './src/index.tsx',
+        './src/index.ts',
     ],
     resolve: {
         modules: [
             'src',
             'node_modules',
-            path.resolve(__dirname),
         ],
         extensions: ['*', '.js', '.jsx', '.ts', '.tsx'],
     },
@@ -61,7 +64,7 @@ module.exports = {
                 },
             },
             {
-                test: /\.(scss|css)$/,
+                test: /\.scss$/,
                 use: [
                     'style-loader',
                     {
@@ -70,9 +73,7 @@ module.exports = {
                     {
                         loader: 'sass-loader',
                         options: {
-                            sassOptions: {
-                                includePaths: ['node_modules/compass-mixins/lib', 'sass'],
-                            },
+                            includePaths: ['node_modules/compass-mixins/lib', 'sass'],
                         },
                     },
                 ],
